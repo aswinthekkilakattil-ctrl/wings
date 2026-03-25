@@ -1509,6 +1509,45 @@ ul {
   width: min(100%, 440px);
 }
 
+.admin-login-alert {
+  margin: 1rem 0 1.2rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+}
+
+.admin-login-alert p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.admin-login-alert p + p {
+  margin-top: 0.45rem;
+}
+
+.admin-login-alert strong {
+  color: var(--text-main);
+}
+
+.admin-login-alert.checking {
+  border-color: rgba(245, 158, 11, 0.25);
+  background: rgba(255, 247, 237, 0.95);
+}
+
+.admin-login-alert.success {
+  border-color: rgba(5, 150, 105, 0.22);
+  background: rgba(236, 253, 245, 0.96);
+}
+
+.admin-login-alert.error {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: rgba(254, 242, 242, 0.96);
+}
+
 .admin-logout-btn {
   margin-top: 1rem;
 }

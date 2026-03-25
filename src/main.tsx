@@ -41,6 +41,11 @@ type LeadApiPayload = {
   consent: boolean
 }
 
+type MongoHealthPayload = {
+  connected?: boolean
+  error?: string
+}
+
 type SiteConfig = {
   meta: {
     title: string
@@ -368,6 +373,33 @@ async function clearLeadsServerless(): Promise<void> {
       ? (payload as { error?: string }).error
       : res.statusText
     throw new Error(message || 'LEADS_CLEAR_FAILED')
+  }
+}
+
+async function checkMongoServerlessHealth(): Promise<void> {
+  const res = await fetch('/api/leads?health=1', {
+    method: 'GET',
+    cache: 'no-store',
+    headers: {
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    },
+  })
+  const text = await res.text()
+  if (/^\s*</.test(text)) {
+    throw new Error('API route is not being reached. Check Vercel root directory and routing.')
+  }
+  let payload: MongoHealthPayload = {}
+  if (text) {
+    try {
+      payload = JSON.parse(text) as MongoHealthPayload
+    } catch {
+      payload = { error: text }
+    }
+  }
+  if (!res.ok || payload.connected !== true) {
+    const message = typeof payload.error === 'string' ? payload.error : 'MongoDB connection failed.'
+    throw new Error(message)
   }
 }
 
@@ -840,6 +872,10 @@ function AlertPopup({
   )
 }
 
+function normalizeLoginUserId(value: string) {
+  return value.trim().toLowerCase()
+}
+
 function App() {
   const [leads, setLeads] = useState<LeadRecord[]>(() => (LOCAL_FALLBACK_ENABLED ? loadLeads() : []))
   const [giveawayCounter, setGiveawayCounter] = useState<number>(() => loadFakeCounter())
@@ -987,7 +1023,7 @@ function App() {
   }
 
   const handleAdminLogin = (userId: string, password: string) => {
-    if (userId === ADMIN_USER_ID && password === ADMIN_PASSWORD) {
+    if (normalizeLoginUserId(userId) === normalizeLoginUserId(ADMIN_USER_ID) && password === ADMIN_PASSWORD) {
       setIsAdminAuthed(true)
       return true
     }
@@ -1085,12 +1121,50 @@ function AdminLoginPage({
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const adminCredentialsConfigured = Boolean(ADMIN_USER_ID && ADMIN_PASSWORD)
+  const [mongoStatus, setMongoStatus] = useState<{
+    tone: 'checking' | 'success' | 'error'
+    message: string
+  }>({
+    tone: adminCredentialsConfigured ? 'checking' : 'error',
+    message: adminCredentialsConfigured
+      ? 'Checking MongoDB connection...'
+      : 'Admin credentials are missing in this deployment. Add VITE_ADMIN_USER_ID and VITE_ADMIN_PASSWORD in Vercel, then redeploy.',
+  })
+
+  useEffect(() => {
+    if (!adminCredentialsConfigured) return
+
+    let active = true
+    setMongoStatus({ tone: 'checking', message: 'Checking MongoDB connection...' })
+
+    checkMongoServerlessHealth()
+      .then(() => {
+        if (!active) return
+        setMongoStatus({ tone: 'success', message: 'MongoDB connection is working.' })
+      })
+      .catch((err) => {
+        if (!active) return
+        const message = err instanceof Error && err.message
+          ? err.message
+          : 'MongoDB connection failed.'
+        setMongoStatus({ tone: 'error', message })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [adminCredentialsConfigured])
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError('')
+    if (!adminCredentialsConfigured) {
+      setError('Admin credentials are not loaded in this deployment. Save the Vercel env vars and redeploy.')
+      return
+    }
     const ok = onLogin(userId.trim(), password)
-    if (!ok) setError('Invalid user ID or password.')
+    if (!ok) setError('Invalid user ID or password. Password is exact, and the User ID from Vercel is now matched without case sensitivity.')
   }
 
   if (isAdminAuthed) {
@@ -1104,6 +1178,14 @@ function AdminLoginPage({
           <p className="form-eyebrow">Admin Access</p>
           <h1 className="form-title">Sign in to Admin Dashboard</h1>
           <p className="form-subtitle">Use your fixed admin credentials to continue.</p>
+          <div className={`admin-login-alert ${mongoStatus.tone}`} role="status" aria-live="polite">
+            <p>
+              <strong>Admin credentials:</strong> {adminCredentialsConfigured ? 'Loaded from deployment' : 'Missing in deployment'}
+            </p>
+            <p>
+              <strong>MongoDB:</strong> {mongoStatus.message}
+            </p>
+          </div>
 
           <form className="lead-form" onSubmit={handleSubmit}>
             <div className="form-group">

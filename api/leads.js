@@ -23,9 +23,13 @@ function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function getQueryParam(req, key) {
+  const value = Array.isArray(req.query?.[key]) ? req.query[key][0] : req.query?.[key]
+  return normalizeString(value)
+}
+
 function getDeleteId(req) {
-  const queryValue = Array.isArray(req.query?.id) ? req.query.id[0] : req.query?.id
-  const queryId = normalizeString(queryValue)
+  const queryId = getQueryParam(req, 'id')
   if (queryId) return queryId
 
   const body = typeof req.body === 'string'
@@ -39,6 +43,18 @@ export default async function handler(req, res) {
   setNoStoreHeaders(res)
 
   if (req.method === 'GET') {
+    if (getQueryParam(req, 'health') === '1') {
+      try {
+        const client = await getClientPromise()
+        await client.db('admin').command({ ping: 1 })
+        return res.status(200).json({ connected: true })
+      } catch (error) {
+        console.error('MongoDB health check failed', error)
+        const message = error instanceof Error ? error.message : 'MONGODB_CONNECTION_FAILED'
+        return res.status(500).json({ connected: false, error: message })
+      }
+    }
+
     try {
       const client = await getClientPromise()
       const db = client.db('wings')
