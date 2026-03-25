@@ -1086,33 +1086,6 @@ ul {
   font-weight: 500;
 }
 
-.giveaway-live-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  margin-top: 0.8rem;
-  padding: 0.45rem 0.8rem;
-  border-radius: var(--radius-full);
-  background: rgba(255, 255, 255, 0.68);
-  border: 1px solid rgba(22, 163, 74, 0.18);
-  color: #166534;
-  font-size: 0.82rem;
-  font-weight: 600;
-  box-shadow: 0 6px 18px rgba(146, 64, 14, 0.08);
-}
-
-.giveaway-live-pill strong {
-  color: #14532d;
-}
-
-.giveaway-live-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #22c55e;
-  box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.16);
-}
-
 .giveaway-progress {
   margin-top: 0.9rem;
 }
@@ -1507,45 +1480,6 @@ ul {
 
 .admin-login-card {
   width: min(100%, 440px);
-}
-
-.admin-login-alert {
-  margin: 1rem 0 1.2rem;
-  padding: 0.9rem 1rem;
-  border-radius: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-}
-
-.admin-login-alert p {
-  margin: 0;
-  font-size: 0.88rem;
-  line-height: 1.55;
-  color: var(--text-soft);
-}
-
-.admin-login-alert p + p {
-  margin-top: 0.45rem;
-}
-
-.admin-login-alert strong {
-  color: var(--text-main);
-}
-
-.admin-login-alert.checking {
-  border-color: rgba(245, 158, 11, 0.25);
-  background: rgba(255, 247, 237, 0.95);
-}
-
-.admin-login-alert.success {
-  border-color: rgba(5, 150, 105, 0.22);
-  background: rgba(236, 253, 245, 0.96);
-}
-
-.admin-login-alert.error {
-  border-color: rgba(220, 38, 38, 0.2);
-  background: rgba(254, 242, 242, 0.96);
 }
 
 .admin-logout-btn {

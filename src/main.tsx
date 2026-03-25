@@ -41,11 +41,6 @@ type LeadApiPayload = {
   consent: boolean
 }
 
-type MongoHealthPayload = {
-  connected?: boolean
-  error?: string
-}
-
 type SiteConfig = {
   meta: {
     title: string
@@ -112,14 +107,11 @@ type SiteConfig = {
 
 const STORAGE_KEY = 'wingscampus-leads'
 const FAKE_COUNTER_KEY = 'wingscampus-fake-giveaway-count'
-const LIVE_COUNTER_KEY = 'wingscampus-live-counter'
 const ADMIN_AUTH_KEY = 'wingscampus-admin-auth'
 const SITE_CONFIG_KEY = 'wingscampus-site-config'
 const CP_AUTH_KEY = 'wingscampus-cp-auth'
 const GIVEAWAY_LIMIT = 100
 const FAKE_COUNTER_MAX = 86
-const LIVE_COUNTER_MIN = 20
-const LIVE_COUNTER_MAX = 80
 const ADMIN_USER_ID = (import.meta.env.VITE_ADMIN_USER_ID ?? '').trim()
 const ADMIN_PASSWORD = (import.meta.env.VITE_ADMIN_PASSWORD ?? '').trim()
 const CP_USER_ID = (import.meta.env.VITE_CP_USER_ID ?? '').trim()
@@ -376,33 +368,6 @@ async function clearLeadsServerless(): Promise<void> {
   }
 }
 
-async function checkMongoServerlessHealth(): Promise<void> {
-  const res = await fetch('/api/leads?health=1', {
-    method: 'GET',
-    cache: 'no-store',
-    headers: {
-      'Cache-Control': 'no-cache',
-      Pragma: 'no-cache',
-    },
-  })
-  const text = await res.text()
-  if (/^\s*</.test(text)) {
-    throw new Error('API route is not being reached. Check Vercel root directory and routing.')
-  }
-  let payload: MongoHealthPayload = {}
-  if (text) {
-    try {
-      payload = JSON.parse(text) as MongoHealthPayload
-    } catch {
-      payload = { error: text }
-    }
-  }
-  if (!res.ok || payload.connected !== true) {
-    const message = typeof payload.error === 'string' ? payload.error : 'MongoDB connection failed.'
-    throw new Error(message)
-  }
-}
-
 function buildLeadApiPayload(record: LeadRecord): LeadApiPayload {
   return {
     id: record.id,
@@ -502,28 +467,6 @@ function loadFakeCounter(): number {
 function saveFakeCounter(value: number) {
   const safe = Math.max(0, Math.min(FAKE_COUNTER_MAX, value))
   window.localStorage.setItem(FAKE_COUNTER_KEY, String(safe))
-}
-
-function randomIntegerBetween(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min
-}
-
-function loadLiveCounter(): number {
-  const saved = window.localStorage.getItem(LIVE_COUNTER_KEY)
-  if (saved) {
-    const parsed = Number.parseInt(saved, 10)
-    if (!Number.isNaN(parsed) && parsed > 0) {
-      return parsed
-    }
-  }
-  const generated = randomIntegerBetween(LIVE_COUNTER_MIN, LIVE_COUNTER_MAX)
-  window.localStorage.setItem(LIVE_COUNTER_KEY, String(generated))
-  return generated
-}
-
-function saveLiveCounter(value: number) {
-  const safe = Math.max(0, Math.round(value))
-  window.localStorage.setItem(LIVE_COUNTER_KEY, String(safe))
 }
 
 function loadAdminAuth(): boolean {
@@ -879,7 +822,6 @@ function normalizeLoginUserId(value: string) {
 function App() {
   const [leads, setLeads] = useState<LeadRecord[]>(() => (LOCAL_FALLBACK_ENABLED ? loadLeads() : []))
   const [giveawayCounter, setGiveawayCounter] = useState<number>(() => loadFakeCounter())
-  const [liveCounter, setLiveCounter] = useState<number>(() => loadLiveCounter())
   const [booting, setBooting] = useState(true)
   const [showPopup, setShowPopup] = useState(() => !window.sessionStorage.getItem('wingscampus-alert-seen'))
   const [isAdminAuthed, setIsAdminAuthed] = useState<boolean>(() => loadAdminAuth())
@@ -895,7 +837,6 @@ function App() {
   useEffect(() => { saveAdminAuth(isAdminAuthed) }, [isAdminAuthed])
   useEffect(() => { saveCpAuth(isCpAuthed) }, [isCpAuthed])
   useEffect(() => { saveFakeCounter(giveawayCounter) }, [giveawayCounter])
-  useEffect(() => { saveLiveCounter(liveCounter) }, [liveCounter])
   useEffect(() => { saveSiteConfig(siteConfig); applyMeta(siteConfig) }, [siteConfig])
   useEffect(() => {
     if (!MONGO_CONFIG_ENABLED) return
@@ -976,7 +917,6 @@ function App() {
       return next
     })
     setGiveawayCounter((current) => Math.min(FAKE_COUNTER_MAX, current + 1))
-    setLiveCounter((current) => current + 1)
   }, [])
 
   useEffect(() => {
@@ -1079,7 +1019,6 @@ function App() {
               <StudentsPage
                 onSubmitLead={handleLeadSubmit}
                 giveawayCounter={giveawayCounter}
-                liveCounter={liveCounter}
                 config={siteConfig}
               />
             }
@@ -1122,39 +1061,6 @@ function AdminLoginPage({
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const adminCredentialsConfigured = Boolean(ADMIN_USER_ID && ADMIN_PASSWORD)
-  const [mongoStatus, setMongoStatus] = useState<{
-    tone: 'checking' | 'success' | 'error'
-    message: string
-  }>({
-    tone: adminCredentialsConfigured ? 'checking' : 'error',
-    message: adminCredentialsConfigured
-      ? 'Checking MongoDB connection...'
-      : 'Admin credentials are missing in this deployment. Add VITE_ADMIN_USER_ID and VITE_ADMIN_PASSWORD in Vercel, then redeploy.',
-  })
-
-  useEffect(() => {
-    if (!adminCredentialsConfigured) return
-
-    let active = true
-    setMongoStatus({ tone: 'checking', message: 'Checking MongoDB connection...' })
-
-    checkMongoServerlessHealth()
-      .then(() => {
-        if (!active) return
-        setMongoStatus({ tone: 'success', message: 'MongoDB connection is working.' })
-      })
-      .catch((err) => {
-        if (!active) return
-        const message = err instanceof Error && err.message
-          ? err.message
-          : 'MongoDB connection failed.'
-        setMongoStatus({ tone: 'error', message })
-      })
-
-    return () => {
-      active = false
-    }
-  }, [adminCredentialsConfigured])
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -1178,14 +1084,6 @@ function AdminLoginPage({
           <p className="form-eyebrow">Admin Access</p>
           <h1 className="form-title">Sign in to Admin Dashboard</h1>
           <p className="form-subtitle">Use your fixed admin credentials to continue.</p>
-          <div className={`admin-login-alert ${mongoStatus.tone}`} role="status" aria-live="polite">
-            <p>
-              <strong>Admin credentials:</strong> {adminCredentialsConfigured ? 'Loaded from deployment' : 'Missing in deployment'}
-            </p>
-            <p>
-              <strong>MongoDB:</strong> {mongoStatus.message}
-            </p>
-          </div>
 
           <form className="lead-form" onSubmit={handleSubmit}>
             <div className="form-group">
@@ -1311,11 +1209,9 @@ function SmoothImage({
 
 function GiveawayBanner({
   spotsLeft,
-  liveCounter,
   config,
 }: {
   spotsLeft: number
-  liveCounter: number
   config: SiteConfig
 }) {
   const filled = Math.min(GIVEAWAY_LIMIT, GIVEAWAY_LIMIT - spotsLeft)
@@ -1333,10 +1229,6 @@ function GiveawayBanner({
         <p className="giveaway-english">
           {textOr(config.giveaway.english, DEFAULT_SITE_CONFIG.giveaway.english)}
         </p>
-        <div className="giveaway-live-pill" aria-live="polite">
-          <span className="giveaway-live-dot" aria-hidden="true" />
-          <strong>{liveCounter}</strong> people are online right now
-        </div>
         <div className="giveaway-progress">
           <div className="giveaway-bar">
             <div className="giveaway-bar-fill" style={{ width: `${pct}%` }} />
@@ -1353,12 +1245,10 @@ function GiveawayBanner({
 function StudentsPage({
   onSubmitLead,
   giveawayCounter,
-  liveCounter,
   config,
 }: {
   onSubmitLead: (form: LeadForm) => Promise<void>
   giveawayCounter: number
-  liveCounter: number
   config: SiteConfig
 }) {
   const [form, setForm] = useState<LeadForm>(initialForm)
@@ -1603,7 +1493,7 @@ function StudentsPage({
       )}
 
       <section className="form-hero-section animate-in animate-in-delay-1" id="register" ref={formRef}>
-        <GiveawayBanner spotsLeft={spotsLeft} liveCounter={liveCounter} config={config} />
+        <GiveawayBanner spotsLeft={spotsLeft} config={config} />
 
         <div className="form-card form-card-hero">
           <div className="form-header">
