@@ -1,0 +1,9 @@
+{
+  "installCommand": "npm install --include=dev",
+  "buildCommand": "npm run build",
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "^/api/(.*)", "dest": "/api/$1" },
+    { "src": "/.*", "dest": "/index.html" }
+  ]
+}

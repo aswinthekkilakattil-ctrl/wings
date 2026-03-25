@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Preferred host
+Host: https://www.wingscampus.org
+
+# Sitemaps for both host variants
+Sitemap: https://www.wingscampus.org/sitemap.xml
+Sitemap: https://wingscampus.org/sitemap.xml
