@@ -6,6 +6,7 @@ import Swal from 'sweetalert2'
 import './styles.css'
 import './alert.css'
 //
+//
 import logoSrc from './assets/logo2.png'
 import boySrc from './assets/man2.webp'
 import offerSrc from './assets/offer.webp'
