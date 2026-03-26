@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { createPortal } from 'react-dom'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import Swal from 'sweetalert2'
 import './styles.css'
 import './alert.css'
 //
@@ -203,6 +204,16 @@ const initialForm: LeadForm = {
   standard: '',
   place: '',
   consent: false,
+}
+
+async function showSubmissionSuccessPopup() {
+  await Swal.fire({
+    icon: 'success',
+    title: 'Submitted Successfully',
+    text: 'Your details have been submitted successfully.',
+    confirmButtonText: 'OK',
+    confirmButtonColor: '#ff7a00',
+  })
 }
 
 async function mongoRequest<T>(action: string, body: Record<string, unknown>): Promise<T> {
@@ -723,7 +734,8 @@ function AlertPopup({
       setForm(initialForm)
       setStatusMsg('Details submitted successfully')
       setStatusType('success')
-      setTimeout(() => onClose(), 2000)
+      await showSubmissionSuccessPopup()
+      onClose()
     } catch (err) {
       if (err instanceof DuplicatePhoneError) {
         setStatusMsg('This phone number is already registered.')
@@ -1256,6 +1268,7 @@ function StudentsPage({
       setForm(initialForm)
       setStatusMsg('Details submitted successfully')
       setStatusType('success')
+      await showSubmissionSuccessPopup()
     } catch (err) {
       if (err instanceof DuplicatePhoneError) {
         setStatusMsg('This phone number is already registered.')

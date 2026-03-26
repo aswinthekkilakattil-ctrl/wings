@@ -1,5 +1,6 @@
 import { createSecureContext } from 'node:tls'
 import { MongoClient } from 'mongodb'
+import nodemailer from 'nodemailer'
 
 function getMongoClientOptions() {
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10)
@@ -29,6 +30,35 @@ function getClientPromise() {
   return globalThis.__mongoClientPromise
 }
 
+function getSubmissionAlertConfig() {
+  const user = normalizeString(process.env.SUBMISSION_ALERT_EMAIL_USER)
+  const pass = normalizeString(process.env.SUBMISSION_ALERT_EMAIL_PASS)
+  const to = normalizeString(process.env.SUBMISSION_ALERT_EMAIL_TO) || user
+
+  if (!user || !pass || !to) {
+    return null
+  }
+
+  return { user, pass, to }
+}
+
+function getSubmissionAlertTransport() {
+  const config = getSubmissionAlertConfig()
+  if (!config) return null
+
+  if (!globalThis.__submissionAlertTransport) {
+    globalThis.__submissionAlertTransport = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: config.user,
+        pass: config.pass,
+      },
+    })
+  }
+
+  return globalThis.__submissionAlertTransport
+}
+
 function setNoStoreHeaders(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
   res.setHeader('Pragma', 'no-cache')
@@ -54,6 +84,55 @@ function getDeleteId(req) {
     : req.body
 
   return normalizeString(body?.id)
+}
+
+function getHeaderValue(req, key) {
+  const value = req.headers?.[key]
+  return Array.isArray(value) ? value.join(', ') : normalizeString(value)
+}
+
+function stringifyPayload(payload) {
+  try {
+    return JSON.stringify(payload ?? {}, null, 2)
+  } catch {
+    return '[unserializable payload]'
+  }
+}
+
+async function sendSubmissionAlertEmail({ category, details, req, payload }) {
+  const config = getSubmissionAlertConfig()
+  const transport = getSubmissionAlertTransport()
+
+  if (!config || !transport) {
+    return
+  }
+
+  const subject = `Wings submission alert: ${category}`
+  const text = [
+    `Category: ${category}`,
+    `Time: ${new Date().toISOString()}`,
+    `Method: ${normalizeString(req.method) || 'UNKNOWN'}`,
+    `URL: ${normalizeString(req.url) || '/api/leads'}`,
+    `IP: ${getHeaderValue(req, 'x-forwarded-for') || req.socket?.remoteAddress || 'UNKNOWN'}`,
+    `User-Agent: ${getHeaderValue(req, 'user-agent') || 'UNKNOWN'}`,
+    '',
+    'Details:',
+    details,
+    '',
+    'Payload:',
+    stringifyPayload(payload),
+  ].join('\n')
+
+  try {
+    await transport.sendMail({
+      from: config.user,
+      to: config.to,
+      subject,
+      text,
+    })
+  } catch (emailError) {
+    console.error('Failed to send submission alert email', emailError)
+  }
 }
 
 export default async function handler(req, res) {
@@ -107,8 +186,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'METHOD_NOT_ALLOWED' })
   }
 
+  let submissionPayload = typeof req.body === 'string' ? req.body : (req.body ?? {})
+
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
+    submissionPayload = body ?? {}
     const studentName = typeof body?.studentName === 'string'
       ? body.studentName.trim()
       : (typeof body?.name === 'string' ? body.name.trim() : '')
@@ -124,6 +206,12 @@ export default async function handler(req, res) {
     const id = typeof body?.id === 'string' ? body.id : ''
 
     if (!studentName || !guardianName || !phone || !school || !standard || !place) {
+      await sendSubmissionAlertEmail({
+        category: 'MISSING_FIELDS',
+        details: 'A submission reached the API without all required fields.',
+        req,
+        payload: submissionPayload,
+      })
       return res.status(400).json({ error: 'MISSING_FIELDS' })
     }
 
@@ -133,10 +221,16 @@ export default async function handler(req, res) {
 
     const existing = await collection.findOne({ phone })
     if (existing) {
+      await sendSubmissionAlertEmail({
+        category: 'DUPLICATE_PHONE',
+        details: `A duplicate submission was blocked for phone ${phone}.`,
+        req,
+        payload: submissionPayload,
+      })
       return res.status(409).json({ error: 'DUPLICATE_PHONE' })
     }
 
-    await collection.insertOne({
+    const leadDocument = {
       id: id || undefined,
       submittedAt: submittedAt || new Date().toISOString(),
       studentName,
@@ -147,14 +241,35 @@ export default async function handler(req, res) {
       place,
       consent,
       createdAt: new Date(),
+    }
+
+    await collection.insertOne(leadDocument)
+
+    await sendSubmissionAlertEmail({
+      category: 'SUBMISSION_SUCCESS',
+      details: `A new lead was submitted successfully for ${studentName}.`,
+      req,
+      payload: leadDocument,
     })
 
     return res.status(200).json({ success: true })
   } catch (error) {
     console.error('Failed to insert lead', error)
     if (error && typeof error === 'object' && 'code' in error && error.code === 11000) {
+      await sendSubmissionAlertEmail({
+        category: 'DUPLICATE_PHONE',
+        details: 'MongoDB rejected the submission because the phone already exists.',
+        req,
+        payload: submissionPayload,
+      })
       return res.status(409).json({ error: 'DUPLICATE_PHONE' })
     }
+    await sendSubmissionAlertEmail({
+      category: 'INTERNAL_ERROR',
+      details: error instanceof Error ? `${error.name}: ${error.message}` : 'Unknown submission error',
+      req,
+      payload: submissionPayload,
+    })
     const message = process.env.NODE_ENV !== 'production' && error instanceof Error
       ? error.message
       : 'INTERNAL_ERROR'

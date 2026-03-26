@@ -89,8 +89,17 @@ function mongoApiDevPlugin(): Plugin {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
-  if (env.MONGODB_URI && !process.env.MONGODB_URI) {
-    process.env.MONGODB_URI = env.MONGODB_URI
+  const serverEnvKeys = [
+    'MONGODB_URI',
+    'SUBMISSION_ALERT_EMAIL_USER',
+    'SUBMISSION_ALERT_EMAIL_PASS',
+    'SUBMISSION_ALERT_EMAIL_TO',
+  ]
+
+  for (const key of serverEnvKeys) {
+    if (env[key] && !process.env[key]) {
+      process.env[key] = env[key]
+    }
   }
 
   return {

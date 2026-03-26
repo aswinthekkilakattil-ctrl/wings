@@ -1,0 +1,4 @@
+[2m11:51:46 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31merror while updating dependencies:
+Error: EPERM: operation not permitted, rename 'C:\D-DRIVE\Work\wings\winggs lates\wings\wings\node_modules\.vite\deps_temp_a81f37e6' -> 'C:\D-DRIVE\Work\wings\winggs lates\wings\wings\node_modules\.vite\deps'[39m
+[2m12:05:18 PM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31merror while updating dependencies:
+Error: EPERM: operation not permitted, rename 'C:\D-DRIVE\Work\wings\winggs lates\wings\wings\node_modules\.vite\deps_temp_6a2fbb5a' -> 'C:\D-DRIVE\Work\wings\winggs lates\wings\wings\node_modules\.vite\deps'[39m
