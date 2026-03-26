@@ -107,12 +107,13 @@ type SiteConfig = {
   }
 }
 
-const FAKE_COUNTER_KEY = 'wingscampus-fake-giveaway-count'
+const FAKE_COUNTER_KEY = 'wingscampus-fake-giveaway-count-v2'
 const ADMIN_AUTH_KEY = 'wingscampus-admin-auth'
 const SITE_CONFIG_KEY = 'wingscampus-site-config'
 const CP_AUTH_KEY = 'wingscampus-cp-auth'
 const GIVEAWAY_LIMIT = 100
-const FAKE_COUNTER_MAX = 86
+const INITIAL_FAKE_COUNTER_MIN = 20
+const INITIAL_FAKE_COUNTER_MAX = 80
 const ADMIN_USER_ID = (import.meta.env.VITE_ADMIN_USER_ID ?? '').trim()
 const ADMIN_PASSWORD = (import.meta.env.VITE_ADMIN_PASSWORD ?? '').trim()
 const CP_USER_ID = (import.meta.env.VITE_CP_USER_ID ?? '').trim()
@@ -156,7 +157,7 @@ const DEFAULT_SITE_CONFIG: SiteConfig = {
     urgencyText: 'Only {spotsLeft} spots left for the Tablet Giveaway',
     eyebrow: 'Registration / രജിസ്ട്രേഷൻ',
     title: 'ഇപ്പോൾ രജിസ്റ്റർ ചെയ്യൂ',
-    subtitle: "Complete this short form to reserve your child's seat in Wings Campus Foundation Course.",
+    subtitle: "Complete this short form to register in Wings Olympiad 2026.",
     studentLabel: 'Student Name / വിദ്യാർത്ഥിയുടെ പേര് *',
     studentPlaceholder: "Enter student's full name",
     guardianLabel: 'Guardian Name / രക്ഷിതാവിന്റെ പേര് *',
@@ -171,7 +172,7 @@ const DEFAULT_SITE_CONFIG: SiteConfig = {
     placeLabel: 'Place / സ്ഥലം *',
     placePlaceholder: 'Enter your place / town',
     consentText: 'I authorize Wings Campus to contact me regarding the Foundation Course and Tablet Giveaway.',
-    submitText: 'Register Now / ഇപ്പോൾ രജിസ്റ്റർ ചെയ്യൂ',
+    submitText: 'Register Now',
     submittingText: 'Submitting...',
   },
   infoCards: [
@@ -452,14 +453,22 @@ async function saveSiteConfigRemote(config: SiteConfig): Promise<void> {
 
 function loadFakeCounter(): number {
   const saved = window.localStorage.getItem(FAKE_COUNTER_KEY)
-  if (!saved) return 0
+  if (!saved) {
+    const seeded = Math.floor(Math.random() * (INITIAL_FAKE_COUNTER_MAX - INITIAL_FAKE_COUNTER_MIN + 1)) + INITIAL_FAKE_COUNTER_MIN
+    window.localStorage.setItem(FAKE_COUNTER_KEY, String(seeded))
+    return seeded
+  }
   const parsed = Number.parseInt(saved, 10)
-  if (Number.isNaN(parsed)) return 0
-  return Math.max(0, Math.min(FAKE_COUNTER_MAX, parsed))
+  if (Number.isNaN(parsed)) {
+    const seeded = Math.floor(Math.random() * (INITIAL_FAKE_COUNTER_MAX - INITIAL_FAKE_COUNTER_MIN + 1)) + INITIAL_FAKE_COUNTER_MIN
+    window.localStorage.setItem(FAKE_COUNTER_KEY, String(seeded))
+    return seeded
+  }
+  return Math.max(0, Math.min(GIVEAWAY_LIMIT, parsed))
 }
 
 function saveFakeCounter(value: number) {
-  const safe = Math.max(0, Math.min(FAKE_COUNTER_MAX, value))
+  const safe = Math.max(0, Math.min(GIVEAWAY_LIMIT, value))
   window.localStorage.setItem(FAKE_COUNTER_KEY, String(safe))
 }
 
@@ -888,7 +897,7 @@ function App() {
 
   const persistLeadRecord = useCallback((record: LeadRecord) => {
     setLeads((current) => [record, ...current])
-    setGiveawayCounter((current) => Math.min(FAKE_COUNTER_MAX, current + 1))
+    setGiveawayCounter((current) => Math.min(GIVEAWAY_LIMIT, current + 1))
   }, [])
 
   useEffect(() => {
@@ -1226,7 +1235,7 @@ function StudentsPage({
   const [showSyllabus, setShowSyllabus] = useState(false)
   const formRef = useRef<HTMLDivElement>(null)
 
-  const spotsLeft = Math.max(1, GIVEAWAY_LIMIT - giveawayCounter)
+  const spotsLeft = Math.max(0, GIVEAWAY_LIMIT - giveawayCounter)
   const urgencyText = config.form.urgencyText.replace('{spotsLeft}', String(spotsLeft))
   const registrationClosed = isRegistrationClosed(config.registrationCloseDate)
   const isFormComplete = Boolean(
