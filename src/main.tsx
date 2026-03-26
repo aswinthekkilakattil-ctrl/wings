@@ -215,6 +215,9 @@ async function showSubmissionSuccessPopup() {
     text: 'Your details have been submitted successfully.',
     confirmButtonText: 'OK',
     confirmButtonColor: '#ff7a00',
+    customClass: {
+      container: 'submission-success-swal-container',
+    },
   })
 }
 

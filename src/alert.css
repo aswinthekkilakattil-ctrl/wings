@@ -1,4 +1,8 @@
 /* ========== ALERT POPUP ========== */
+.swal2-container.submission-success-swal-container {
+  z-index: 20000 !important;
+}
+
 .alert-popup-overlay {
   position: fixed;
   inset: 0;
