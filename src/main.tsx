@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import './styles.css'
 import './alert.css'
-
+//
 import logoSrc from './assets/logo2.png'
 import boySrc from './assets/man2.webp'
 import offerSrc from './assets/offer.webp'
