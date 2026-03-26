@@ -29,11 +29,11 @@ npm run build
 
 ## Lead Collection Note
 
-This project has no backend. Right now:
+Lead submissions are now Mongo-backed only.
 
-- Student entries are stored in the browser `localStorage`.
-- Leads can be reviewed in `/admin` and exported as `CSV`, which opens in Excel.
-- If you want shared real campaign submissions from ads, set a sheet or form endpoint in `src/main.tsx` using `SHEET_ENDPOINT`.
+- `npm run dev` serves `/api/leads` through the Vite dev server and uses `MONGODB_URI`.
+- Vercel uses the serverless function in `api/leads.js`.
+- Optional `VITE_MONGO_*` values can still be used as a fallback direct connection path when needed.
 
 ## cPanel
 

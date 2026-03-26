@@ -105,7 +105,6 @@ type SiteConfig = {
   }
 }
 
-const STORAGE_KEY = 'wingscampus-leads'
 const FAKE_COUNTER_KEY = 'wingscampus-fake-giveaway-count'
 const ADMIN_AUTH_KEY = 'wingscampus-admin-auth'
 const SITE_CONFIG_KEY = 'wingscampus-site-config'
@@ -126,8 +125,6 @@ const MONGO_CONFIG_COLLECTION = (import.meta.env.VITE_MONGO_CONFIG_COLLECTION ??
 const MONGO_ENABLED = Boolean(MONGO_DATA_API_URL && MONGO_DATA_API_KEY && MONGO_DATA_SOURCE && MONGO_DB)
 const MONGO_CONFIG_ENABLED = Boolean(MONGO_ENABLED && MONGO_CONFIG_COLLECTION)
 const SITE_CONFIG_DOC_ID = 'site-config'
-const LOCAL_FALLBACK_ENABLED = import.meta.env.DEV
-
 const DEFAULT_SITE_CONFIG: SiteConfig = {
   meta: {
     title: 'Wings Campus - NEET/JEE Foundation Course',
@@ -206,21 +203,6 @@ const initialForm: LeadForm = {
   standard: '',
   place: '',
   consent: false,
-}
-
-function loadLeads(): LeadRecord[] {
-  const saved = window.localStorage.getItem(STORAGE_KEY)
-  if (!saved) return []
-  try {
-    return JSON.parse(saved) as LeadRecord[]
-  } catch {
-    window.localStorage.removeItem(STORAGE_KEY)
-    return []
-  }
-}
-
-function saveLeads(records: LeadRecord[]) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
 }
 
 async function mongoRequest<T>(action: string, body: Record<string, unknown>): Promise<T> {
@@ -820,7 +802,7 @@ function normalizeLoginUserId(value: string) {
 }
 
 function App() {
-  const [leads, setLeads] = useState<LeadRecord[]>(() => (LOCAL_FALLBACK_ENABLED ? loadLeads() : []))
+  const [leads, setLeads] = useState<LeadRecord[]>([])
   const [giveawayCounter, setGiveawayCounter] = useState<number>(() => loadFakeCounter())
   const [booting, setBooting] = useState(true)
   const [showPopup, setShowPopup] = useState(() => !window.sessionStorage.getItem('wingscampus-alert-seen'))
@@ -829,11 +811,6 @@ function App() {
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(() => loadSiteConfig())
   const [remoteConfigReady, setRemoteConfigReady] = useState(!MONGO_CONFIG_ENABLED)
 
-  useEffect(() => {
-    if (!LOCAL_FALLBACK_ENABLED) {
-      window.localStorage.removeItem(STORAGE_KEY)
-    }
-  }, [])
   useEffect(() => { saveAdminAuth(isAdminAuthed) }, [isAdminAuthed])
   useEffect(() => { saveCpAuth(isCpAuthed) }, [isCpAuthed])
   useEffect(() => { saveFakeCounter(giveawayCounter) }, [giveawayCounter])
@@ -869,59 +846,41 @@ function App() {
   }, [siteConfig, remoteConfigReady])
 
   const refreshLeads = useCallback(async () => {
-    if (!MONGO_ENABLED && LOCAL_FALLBACK_ENABLED) {
-      const records = loadLeads()
-      setLeads(records)
-      return records
-    }
+    let lastError: unknown
 
     try {
       const records = await fetchLeadsServerless()
       setLeads(records)
-      if (LOCAL_FALLBACK_ENABLED) {
-        saveLeads(records)
-      }
       return records
-    } catch {
-      if (!MONGO_ENABLED) {
-        if (LOCAL_FALLBACK_ENABLED) {
-          saveLeads([])
-        }
-        setLeads([])
-        return []
-      }
+    } catch (error) {
+      lastError = error
+    }
+
+    if (!MONGO_ENABLED) {
+      throw lastError instanceof Error ? lastError : new Error('LEADS_FETCH_FAILED')
     }
 
     try {
       const records = await fetchLeadsRemote()
       setLeads(records)
-      if (LOCAL_FALLBACK_ENABLED) {
-        saveLeads(records)
-      }
       return records
-    } catch {
-      if (LOCAL_FALLBACK_ENABLED) {
-        saveLeads([])
-      }
-      setLeads([])
-      return []
+    } catch (error) {
+      throw error instanceof Error
+        ? error
+        : lastError instanceof Error
+          ? lastError
+          : new Error('LEADS_FETCH_FAILED')
     }
   }, [])
 
   const persistLeadRecord = useCallback((record: LeadRecord) => {
-    setLeads((current) => {
-      const next = [record, ...current]
-      if (LOCAL_FALLBACK_ENABLED) {
-        saveLeads(next)
-      }
-      return next
-    })
+    setLeads((current) => [record, ...current])
     setGiveawayCounter((current) => Math.min(FAKE_COUNTER_MAX, current + 1))
   }, [])
 
   useEffect(() => {
     if (!isAdminAuthed) return
-    void refreshLeads()
+    refreshLeads().catch(() => { })
   }, [isAdminAuthed, refreshLeads])
   useEffect(() => {
     const t = window.setTimeout(() => setBooting(false), 950)
@@ -938,8 +897,6 @@ function App() {
       if (exists) {
         throw new DuplicatePhoneError()
       }
-    } else if (leads.some((lead) => normalizePhone(lead.phone) === normalizedPhone)) {
-      throw new DuplicatePhoneError()
     }
 
     const record: LeadRecord = {
@@ -954,9 +911,7 @@ function App() {
       if (MONGO_ENABLED) {
         await insertLeadRemote(record)
       } else {
-        if (!LOCAL_FALLBACK_ENABLED) {
-          throw error
-        }
+        throw error
       }
     }
     persistLeadRecord(record)
@@ -1985,19 +1940,10 @@ function AdminPage({
 
   const syncLeads = (next: LeadRecord[]) => {
     setLeads(next)
-    if (LOCAL_FALLBACK_ENABLED) {
-      saveLeads(next)
-    }
   }
 
   const syncLeadsWithout = (leadId: string) => {
-    setLeads((current) => {
-      const next = current.filter((lead) => lead.id !== leadId)
-      if (LOCAL_FALLBACK_ENABLED) {
-        saveLeads(next)
-      }
-      return next
-    })
+    setLeads((current) => current.filter((lead) => lead.id !== leadId))
   }
 
   const refreshLatestLeads = async (showStatus = true) => {
@@ -2026,12 +1972,12 @@ function AdminPage({
         if (MONGO_ENABLED) {
           await clearLeadsRemote()
         } else {
-          saveLeads([])
+          throw new Error('LEADS_CLEAR_FAILED')
         }
       }
       syncLeads([])
       await refreshLatestLeads(false)
-      setStatus(MONGO_ENABLED ? 'All student data deleted from MongoDB.' : 'All local student data cleared.')
+      setStatus('All student data deleted from MongoDB.')
     } catch {
       setStatus('Failed to clear student data. Please try again.')
     } finally {
@@ -2048,7 +1994,7 @@ function AdminPage({
       } catch (error) {
         if (MONGO_ENABLED) {
           await deleteLeadRemote(lead.id)
-        } else if (!LOCAL_FALLBACK_ENABLED) {
+        } else {
           throw error
         }
       }

@@ -1,4 +1,21 @@
+import { createSecureContext } from 'node:tls'
 import { MongoClient } from 'mongodb'
+
+function getMongoClientOptions() {
+  const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10)
+
+  // Node 24/OpenSSL 3.5 can fail Atlas handshakes locally with SSL alert 80.
+  // Lowering the OpenSSL security level for this client restores the Atlas TLS handshake.
+  if (Number.isNaN(nodeMajor) || nodeMajor < 24) {
+    return {}
+  }
+
+  return {
+    secureContext: createSecureContext({
+      ciphers: 'DEFAULT@SECLEVEL=1',
+    }),
+  }
+}
 
 function getClientPromise() {
   if (!globalThis.__mongoClientPromise) {
@@ -6,7 +23,7 @@ function getClientPromise() {
     if (!uri) {
       throw new Error('Missing MONGODB_URI in environment.')
     }
-    const client = new MongoClient(uri)
+    const client = new MongoClient(uri, getMongoClientOptions())
     globalThis.__mongoClientPromise = client.connect()
   }
   return globalThis.__mongoClientPromise
